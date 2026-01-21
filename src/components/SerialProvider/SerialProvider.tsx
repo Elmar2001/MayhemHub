@@ -380,19 +380,22 @@ const useWebSerial = ({
     const writer = port?.writable?.getWriter();
     if (writer) {
       try {
-        // Once speed is fixed, this can be swapped in for the loop below
-        await writer.write(data);
+        const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
 
-        // let blob = new Blob([data]);
-        // const arrayBuffer = await blob.arrayBuffer();
-        // const chunkSize = 350;
+        // Use chunking for Mac, or if the data is large (> 1024 bytes)
+        // The issue report mentions failures > 256 bytes on Mac.
+        if (isMac || data.length > 1024) {
+          const chunkSize = 256;
 
-        // for (let i = 0; i < arrayBuffer.byteLength; i += chunkSize) {
-        //   const chunk = arrayBuffer.slice(i, i + chunkSize);
-        //   await delay(5);
-        //   await writer.write(new Uint8Array(chunk));
-        // }
-        writer.releaseLock();
+          for (let i = 0; i < data.length; i += chunkSize) {
+            const chunk = data.slice(i, i + chunkSize);
+            await writer.write(chunk);
+            // Small delay to allow buffer processing
+            if (isMac) await delay(2);
+          }
+        } else {
+           await writer.write(data);
+        }
 
         setMessageQueue((prevQueue) => prevQueue.slice(1)); // Remove the message we just wrote from the queue
       } finally {
